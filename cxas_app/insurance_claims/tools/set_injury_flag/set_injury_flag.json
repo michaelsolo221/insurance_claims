@@ -1,0 +1,10 @@
+{
+    "name": "set_injury_flag",
+    "pythonFunction": {
+        "name": "set_injury_flag",
+        "pythonCode": "tools/set_injury_flag/python_function/python_code.py",
+        "description": "Records whether anyone was injured in the incident (true/false)."
+    },
+    "executionType": "SYNCHRONOUS",
+    "displayName": "set_injury_flag"
+}

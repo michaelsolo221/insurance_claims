@@ -1,0 +1,685 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# =============================================================================
+# GOLDEN EVALS -- insurance_claims (root_agent, "Amanda")
+#
+# Source: tdd.md (APPROVED) Coverage Map, rows where Eval Type == Golden.
+# Grounded in cxas_app/insurance_claims/agents/root_agent/root_agent.json,
+# app.json, instruction.txt, and the before_model_callbacks_01 /
+# after_model_callbacks_01 python_code.py (the Slot-Filling DAG Framework).
+#
+# GROUNDING MANIFEST (do not reference anything outside this list):
+#   Real tools:     set_caller_name, set_callback_phone, set_policy_number,
+#                    set_incident_datetime, set_incident_location,
+#                    set_incident_description, set_injury_flag,
+#                    set_hazard_flag, set_callback_window, flag_emergency,
+#                    submit_claim_notification, end_session
+#   Real agents:    root_agent only (no childAgents -- single-agent app)
+#   Real variables: telephony-caller-id, _emergency_flag,
+#                    claim_notification_draft, _system_message,
+#                    _submission_acknowledged
+#
+# IMPORTANT ASSUMPTIONS / KNOWN GAPS (flagged, not silently papered over):
+#
+# 1. claim_notification_draft, _emergency_flag, _system_message, and
+#    _submission_acknowledged are orchestrator/callback-derived state --
+#    per app.json's variable descriptions they must NEVER be set in
+#    session_parameters. Only telephony-caller-id is a legitimate per-CUJ
+#    session parameter (it drives the pre-fill-vs-verbal-capture branch,
+#    tdd.md Section 12). Because claim_notification_draft can't be seeded,
+#    every golden that needs to reach the readback/submission phase must
+#    walk all 9 FNOL slots turn-by-turn -- there is no shortcut.
+#
+# 2. submit_claim_notification's real python_code.py makes a live
+#    `google.cloud.firestore` call with no mocking hook exposed at the
+#    golden-YAML level (tdd.md's Known Issues section flags the Firestore/
+#    Cloud Task infra wiring as still-open). The Coverage Map rows for
+#    "FNOL happy path" and "readback confirmation" assume a MOCKED
+#    Firestore SUCCESS, and "Firestore write failure" assumes a MOCKED
+#    Firestore FAILURE -- these goldens are written to that assumption.
+#    Whoever runs this suite must ensure the eval execution environment
+#    (not this YAML) mocks the Firestore client accordingly; absent that
+#    mock, the tool's real code will raise (no credentials in a bare
+#    sandbox) and every golden will observe the FAILURE branch instead,
+#    including the ones meant to prove the SUCCESS branch. Surfaced here
+#    for the main thread/stakeholder, not fabricated away.
+#
+# 3. FIXED (2026-07-05): _run_slot_filling() in before_model_callbacks_01
+#    previously had a callback_phone pre-fill confirmation loop bug where
+#    the "confirm your callback number" message fired unconditionally on
+#    every turn with no way to promote callback_phone from "pending" to
+#    "confirmed" before Phase 2 readback — the agent would re-ask the
+#    phone confirmation on every turn, blocking progression to other
+#    slots. Fixed by adding a dedicated pre-fill confirmation sub-phase
+#    that runs BEFORE Phase 1 collection: a caller's spoken "yes" promotes
+#    callback_phone to "confirmed" immediately, and slot-filling moves on
+#    to the next unfilled slot. The callback_phone_prefill_readback golden
+#    can now be extended beyond the single initial turn into a full
+#    happy-path sequence (e.g., confirm phone -> collect other slots ->
+#    readback -> submit). Marked for eval-writer follow-up in a future
+#    gate-5 dispatch — out of scope for this bug-fix pass.
+# =============================================================================
+
+common_session_parameters:
+  # No variable is safe to share as a blanket default here: the only
+  # legitimate externally-supplied session parameter (telephony-caller-id)
+  # varies deliberately per CUJ (present vs. absent), and every other
+  # declared variable (_emergency_flag, claim_notification_draft,
+  # _system_message, _submission_acknowledged) must NEVER be set by an
+  # eval per app.json's variable descriptions -- they are derived only.
+  {}
+
+conversations:
+  # ===========================================================================
+  # CUJ 1 -- Fixed greeting (tdd.md Coverage Map row 1)
+  # P0, HIGH. Deterministic, callback-enforced opening line (before_model_
+  # callback's PRIORITY 1 check on "<event>session start</event>").
+  # ===========================================================================
+  - conversation: greeting_fixed_amanda_persona
+    session_parameters: {}
+    turns:
+      - user: "<event>welcome</event>"
+        agent: "Good day, you've reached CGU express claim lodgements, my name is Amanda, how can I help you?"
+    expectations:
+      - "The agent's very first utterance must be the exact scripted greeting naming the persona Amanda and 'CGU express claim lodgements'."
+      - "The agent must not improvise a different opening line or skip the greeting."
+    tags: [P0, HIGH, greeting, persona, "§12", insurance_claims, audio, fnol]
+
+  # ===========================================================================
+  # CUJ 2 -- FNOL happy path: all required + optional fields, readback
+  # confirmed, Firestore write mocked to SUCCEED (tdd.md Coverage Map row 2).
+  # P0, NO-GO. telephony-caller-id deliberately ABSENT so this golden walks
+  # the plain sequential slot order without engaging the pre-fill branch
+  # (see gap #3 above -- that branch is covered separately and more safely
+  # by callback_phone_prefill_readback).
+  # ===========================================================================
+  - conversation: fnol_happy_path_full_capture
+    session_parameters:
+      telephony-caller-id: ""
+    turns:
+      - user: "<event>welcome</event>"
+        agent: "Good day, you've reached CGU express claim lodgements, my name is Amanda, how can I help you?"
+
+      - user: "Hi, I'd like to report a claim."
+        agent: "Could I get your full name, please?"
+
+      - user: "John Smith."
+        agent: "Thanks, John. What's the best phone number to reach you on?"
+        tool_calls:
+          - action: set_caller_name
+            args:
+              caller_name: "John Smith"
+
+      - user: "0412 345 678."
+        agent: "Do you have your CGU policy number handy? That's fine to skip if you don't have it."
+        tool_calls:
+          - action: set_callback_phone
+            args:
+              phone_number: "0412 345 678"
+
+      - user: "Yes, it's CGU-88213."
+        agent: "When did the incident happen -- the date and approximate time?"
+        tool_calls:
+          - action: set_policy_number
+            args:
+              policy_number: "CGU-88213"
+
+      - user: "Yesterday afternoon, around 3pm."
+        agent: "Where did the incident happen?"
+        tool_calls:
+          - action: set_incident_datetime
+            args:
+              incident_datetime:
+                $matchType: "ignore"
+                $matchValue: ""
+                $originalValue: ""
+
+      - user: "On the corner of George Street and Market Street in Sydney."
+        agent: "Can you tell me what happened?"
+        tool_calls:
+          - action: set_incident_location
+            args:
+              incident_location:
+                $matchType: "semantic"
+                $matchValue: "The corner of George Street and Market Street in Sydney"
+                $originalValue: ""
+
+      - user: "A car ran a red light and hit my car -- just a fender bender."
+        agent: "Was anyone injured?"
+        tool_calls:
+          - action: set_incident_description
+            args:
+              incident_description:
+                $matchType: "semantic"
+                $matchValue: "A car ran a red light and hit the caller's car, a minor collision"
+                $originalValue: ""
+
+      - user: "No, no injuries."
+        agent: "Is there an ongoing hazard at the scene right now, like a safety risk to others?"
+        tool_calls:
+          - action: set_injury_flag
+            args:
+              injury_occurred: false
+
+      - user: "No, it's all cleared up now."
+        agent: "Is there a particular time of day that's best for us to call you back? That's optional."
+        tool_calls:
+          - action: set_hazard_flag
+            args:
+              hazard_present: false
+
+      - user: "Weekday afternoons work best."
+        agent: "So just to confirm everything I've got: your name is John Smith, the best number to reach you is 0412 345 678, your policy number is CGU-88213, the incident happened yesterday afternoon around 3pm, at the corner of George Street and Market Street in Sydney, where a car ran a red light and hit your car in a minor collision, nobody was injured, there's no ongoing hazard, and weekday afternoons work best for a callback. Is all of that correct?"
+        tool_calls:
+          - action: set_callback_window
+            args:
+              callback_window:
+                $matchType: "semantic"
+                $matchValue: "Weekday afternoons"
+                $originalValue: ""
+
+      - user: "Yes, that's all correct."
+        agent: "Thank you, your claim notification has been lodged. A CGU claims consultant will follow up with you soon. Take care."
+        tool_calls:
+          - action: submit_claim_notification
+            args: {}
+          - action: end_session
+            args:
+              session_escalated: false
+    expectations:
+      - "The agent must capture all 9 FNOL fields one at a time, never asking for more than one piece of information per turn."
+      - "The agent must read back the full set of captured details and get explicit confirmation before calling submit_claim_notification."
+      - "The agent must call submit_claim_notification only once, only after the caller confirms the readback."
+      - "On a successful submission, the agent must speak an explicit success acknowledgment and end the call."
+    tags: [P0, "NO-GO", fnol-happy-path, slot-filling, "§1", "§6", "§7", "§11", "§12", insurance_claims, audio, fnol]
+
+  # ===========================================================================
+  # CUJ 3 -- Callback phone pre-fill from telephony-caller-id (tdd.md
+  # Coverage Map row 3). P1, MEDIUM. Gap #3 (callback_phone pre-fill
+  # confirmation loop) has been fixed — this golden can now be extended
+  # into a full pre-fill happy-path sequence (confirm -> collect ->
+  # readback -> submit). Marked for eval-writer gate-5 follow-up.
+  # ===========================================================================
+  - conversation: callback_phone_prefill_readback
+    session_parameters:
+      telephony-caller-id: "0412 987 654"
+    turns:
+      - user: "<event>welcome</event>"
+        agent: "Good day, you've reached CGU express claim lodgements, my name is Amanda, how can I help you?"
+
+      - user: "Hi, I'd like to report a claim."
+        agent: "Can I confirm the best callback number is 0412 987 654?"
+    expectations:
+      - "When telephony-caller-id is present, the agent must read back that number and ask the caller to confirm it, rather than asking for a callback number cold."
+      - "The agent must not call set_callback_phone before the caller has responded to the read-back."
+    tags: [P1, MEDIUM, callback-phone-prefill, telephony, "§12", insurance_claims, audio, fnol]
+
+  # ===========================================================================
+  # CUJ 4 -- Callback phone fallback: telephony-caller-id absent/empty
+  # (tdd.md Coverage Map row 4). P1, MEDIUM.
+  # ===========================================================================
+  - conversation: callback_phone_fallback_verbal_capture
+    session_parameters:
+      telephony-caller-id: ""
+    turns:
+      - user: "<event>welcome</event>"
+        agent: "Good day, you've reached CGU express claim lodgements, my name is Amanda, how can I help you?"
+
+      - user: "Hi, I'd like to report a claim."
+        agent: "Could I get your full name, please?"
+
+      - user: "Priya Patel."
+        agent: "What's the best phone number to reach you on?"
+        tool_calls:
+          - action: set_caller_name
+            args:
+              caller_name: "Priya Patel"
+
+      - user: "0398 765 432."
+        agent: "Do you have your CGU policy number handy? That's fine to skip if you don't have it."
+        tool_calls:
+          - action: set_callback_phone
+            args:
+              phone_number: "0398 765 432"
+    expectations:
+      - "When telephony-caller-id is absent, the agent must ask for the callback phone number verbally instead of presenting a pre-filled number for confirmation."
+      - "The callback phone number must be asked for in its normal slot order (after name), not treated specially."
+    tags: [P1, MEDIUM, callback-phone-fallback, telephony, "§12", insurance_claims, audio, fnol]
+
+  # ===========================================================================
+  # CUJ 5 -- Optional field omitted does not block progress (tdd.md Coverage
+  # Map row 5). P1, HIGH. Demonstrates the policy_number skip; callback_window
+  # follows the identical orchestrator code path (_run_slot_filling's
+  # not-required branch marks it "not_captured" on a single decline, no
+  # attempts counter), so exercising one optional slot is sufficient to
+  # validate the mechanism without duplicating a second full slot walk.
+  # ===========================================================================
+  - conversation: fnol_optional_field_skipped
+    session_parameters:
+      telephony-caller-id: ""
+    turns:
+      - user: "<event>welcome</event>"
+        agent: "Good day, you've reached CGU express claim lodgements, my name is Amanda, how can I help you?"
+
+      - user: "I'd like to report a claim."
+        agent: "Could I get your full name, please?"
+
+      - user: "Maria Chen."
+        agent: "What's the best phone number to reach you on?"
+        tool_calls:
+          - action: set_caller_name
+            args:
+              caller_name: "Maria Chen"
+
+      - user: "0455 111 222."
+        agent: "Do you have your CGU policy number handy? That's fine to skip if you don't have it."
+        tool_calls:
+          - action: set_callback_phone
+            args:
+              phone_number: "0455 111 222"
+
+      - user: "No, I don't have it handy."
+        agent: "When did the incident happen -- the date and approximate time?"
+    expectations:
+      - "Declining to provide the optional policy number must not block progression to the next required field (incident date/time)."
+      - "The agent must not re-ask for the policy number after the caller declines it once."
+    tags: [P1, HIGH, fnol-optional-field, slot-filling, "§6", "§11", insurance_claims, audio, fnol]
+
+  # ===========================================================================
+  # CUJ 6 -- Required-field retry exhaustion (tdd.md Coverage Map row 6).
+  # P1, HIGH. 3 total attempts (the original ask + 2 retries) per the
+  # confirmed retry policy, then the orchestrator proceeds without blocking.
+  # ===========================================================================
+  - conversation: retry_exhaustion_required_field
+    session_parameters:
+      telephony-caller-id: ""
+    turns:
+      - user: "<event>welcome</event>"
+        agent: "Good day, you've reached CGU express claim lodgements, my name is Amanda, how can I help you?"
+
+      - user: "Hi, I want to report a claim."
+        agent: "Could I get your full name, please?"
+
+      - user: "I'd rather not say."
+        agent: "Could I get your full name, please?"
+
+      - user: "I really don't want to give my name."
+        agent: "Could I get your full name, please?"
+
+      - user: "No, I won't tell you."
+        agent: "What's the best phone number to reach you on?"
+    expectations:
+      - "After 3 total attempts (the original ask plus 2 retries) to get the caller's name, the agent must stop asking and move on to the next required field instead of blocking the call."
+      - "The agent must not ask a fourth time for the caller's name in this conversation."
+    tags: [P1, HIGH, retry-exhaustion, slot-filling, "§11", insurance_claims, audio, fnol]
+
+  # ===========================================================================
+  # CUJ 7 -- Mandatory readback/confirmation before submission (tdd.md
+  # Coverage Map row 7). P0, HIGH. Distinct from the happy path: this
+  # exercises a mid-readback CORRECTION, which re-opens the recap
+  # (instruction.txt's Final_Readback_Confirmation step 3 /
+  # _run_slot_filling's re-presented readback message), rather than an
+  # immediate confirmation.
+  # ===========================================================================
+  - conversation: readback_confirmation_with_correction
+    session_parameters:
+      telephony-caller-id: ""
+    turns:
+      - user: "<event>welcome</event>"
+        agent: "Good day, you've reached CGU express claim lodgements, my name is Amanda, how can I help you?"
+
+      - user: "Hi, I need to report a claim."
+        agent: "Could I get your full name, please?"
+
+      - user: "David Nguyen."
+        agent: "Thanks, David. What's the best phone number to reach you on?"
+        tool_calls:
+          - action: set_caller_name
+            args:
+              caller_name: "David Nguyen"
+
+      - user: "0400 222 333."
+        agent: "Do you have your CGU policy number handy? That's fine to skip if you don't have it."
+        tool_calls:
+          - action: set_callback_phone
+            args:
+              phone_number: "0400 222 333"
+
+      - user: "Yes, CGU-55210."
+        agent: "When did the incident happen -- the date and approximate time?"
+        tool_calls:
+          - action: set_policy_number
+            args:
+              policy_number: "CGU-55210"
+
+      - user: "This morning around 9am."
+        agent: "Where did the incident happen?"
+        tool_calls:
+          - action: set_incident_datetime
+            args:
+              incident_datetime:
+                $matchType: "ignore"
+                $matchValue: ""
+                $originalValue: ""
+
+      - user: "In the car park at Westfield Bondi Junction."
+        agent: "Can you tell me what happened?"
+        tool_calls:
+          - action: set_incident_location
+            args:
+              incident_location:
+                $matchType: "semantic"
+                $matchValue: "The car park at Westfield Bondi Junction"
+                $originalValue: ""
+
+      - user: "Someone reversed into the side of my car in the car park."
+        agent: "Was anyone injured?"
+        tool_calls:
+          - action: set_incident_description
+            args:
+              incident_description:
+                $matchType: "semantic"
+                $matchValue: "Someone reversed into the side of the caller's car in the car park"
+                $originalValue: ""
+
+      - user: "No, nobody was hurt."
+        agent: "Is there an ongoing hazard at the scene right now, like a safety risk to others?"
+        tool_calls:
+          - action: set_injury_flag
+            args:
+              injury_occurred: false
+
+      - user: "No hazard, it's fine."
+        agent: "Is there a particular time of day that's best for us to call you back? That's optional."
+        tool_calls:
+          - action: set_hazard_flag
+            args:
+              hazard_present: false
+
+      - user: "After 5pm on weekdays."
+        agent: "So just to confirm everything I've got: your name is David Nguyen, the best number to reach you is 0400 222 333, your policy number is CGU-55210, the incident happened this morning around 9am, in the car park at Westfield Bondi Junction, where someone reversed into the side of your car, nobody was injured, there's no ongoing hazard, and after 5pm on weekdays works best for a callback. Is all of that correct?"
+        tool_calls:
+          - action: set_callback_window
+            args:
+              callback_window:
+                $matchType: "semantic"
+                $matchValue: "After 5pm on weekdays"
+                $originalValue: ""
+
+      - user: "Wait, actually my number is 0400 111 222, not what I gave you before."
+        agent: "So to confirm the update: your name is David Nguyen, the best number to reach you is now 0400 111 222, your policy number is CGU-55210, the incident happened this morning around 9am, in the car park at Westfield Bondi Junction, where someone reversed into the side of your car, nobody was injured, there's no ongoing hazard, and after 5pm on weekdays works best for a callback. Is that all correct now?"
+        tool_calls:
+          - action: set_callback_phone
+            args:
+              phone_number: "0400 111 222"
+
+      - user: "Yes, that's correct now."
+        agent: "Thank you, your claim notification has been lodged. A CGU claims consultant will follow up with you soon. Take care."
+        tool_calls:
+          - action: submit_claim_notification
+            args: {}
+          - action: end_session
+            args:
+              session_escalated: false
+    expectations:
+      - "submit_claim_notification must not be callable/visible until the caller has explicitly confirmed the full readback."
+      - "If the caller corrects a value during the readback, the agent must call the matching setter tool and present an updated readback recap rather than proceeding to submission on the stale values."
+      - "The agent must only submit and acknowledge success after the caller confirms the corrected recap."
+    tags: [P0, HIGH, readback-confirmation, slot-filling, "§6", insurance_claims, audio, fnol]
+
+  # ===========================================================================
+  # CUJ 8 -- Firestore write failure: apology + no silent end + fallback
+  # (tdd.md Coverage Map row 8, replaces the superseded Gmail-failure row
+  # per §12). P0, HIGH. See gap #2 above -- this golden assumes the eval
+  # execution environment mocks submit_claim_notification's Firestore
+  # write to fail.
+  # ===========================================================================
+  - conversation: submission_failure_firestore_apology_fallback
+    session_parameters:
+      telephony-caller-id: ""
+    turns:
+      - user: "<event>welcome</event>"
+        agent: "Good day, you've reached CGU express claim lodgements, my name is Amanda, how can I help you?"
+
+      - user: "Hi, I need to report a claim."
+        agent: "Could I get your full name, please?"
+
+      - user: "Amira Hassan."
+        agent: "Thanks, Amira. What's the best phone number to reach you on?"
+        tool_calls:
+          - action: set_caller_name
+            args:
+              caller_name: "Amira Hassan"
+
+      - user: "0433 555 000."
+        agent: "Do you have your CGU policy number handy? That's fine to skip if you don't have it."
+        tool_calls:
+          - action: set_callback_phone
+            args:
+              phone_number: "0433 555 000"
+
+      - user: "Yes, it's CGU-77102."
+        agent: "When did the incident happen -- the date and approximate time?"
+        tool_calls:
+          - action: set_policy_number
+            args:
+              policy_number: "CGU-77102"
+
+      - user: "Yesterday evening around 6pm."
+        agent: "Where did the incident happen?"
+        tool_calls:
+          - action: set_incident_datetime
+            args:
+              incident_datetime:
+                $matchType: "ignore"
+                $matchValue: ""
+                $originalValue: ""
+
+      - user: "At the intersection of Toorak Road and Chapel Street in Melbourne."
+        agent: "Can you tell me what happened?"
+        tool_calls:
+          - action: set_incident_location
+            args:
+              incident_location:
+                $matchType: "semantic"
+                $matchValue: "The intersection of Toorak Road and Chapel Street in Melbourne"
+                $originalValue: ""
+
+      - user: "A delivery van clipped my side mirror while I was parked."
+        agent: "Was anyone injured?"
+        tool_calls:
+          - action: set_incident_description
+            args:
+              incident_description:
+                $matchType: "semantic"
+                $matchValue: "A delivery van clipped the caller's side mirror while parked"
+                $originalValue: ""
+
+      - user: "No, no injuries."
+        agent: "Is there an ongoing hazard at the scene right now, like a safety risk to others?"
+        tool_calls:
+          - action: set_injury_flag
+            args:
+              injury_occurred: false
+
+      - user: "No, no hazard."
+        agent: "Is there a particular time of day that's best for us to call you back? That's optional."
+        tool_calls:
+          - action: set_hazard_flag
+            args:
+              hazard_present: false
+
+      - user: "Mornings before 10am."
+        agent: "So just to confirm everything I've got: your name is Amira Hassan, the best number to reach you is 0433 555 000, your policy number is CGU-77102, the incident happened yesterday evening around 6pm, at the intersection of Toorak Road and Chapel Street in Melbourne, where a delivery van clipped your side mirror while you were parked, nobody was injured, there's no ongoing hazard, and mornings before 10am work best for a callback. Is all of that correct?"
+        tool_calls:
+          - action: set_callback_window
+            args:
+              callback_window:
+                $matchType: "semantic"
+                $matchValue: "Mornings before 10am"
+                $originalValue: ""
+
+      - user: "Yes, that's all correct."
+        agent: "I'm sorry, I wasn't able to lodge your claim notification just now due to a system issue on our end."
+        tool_calls:
+          - action: submit_claim_notification
+            args: {}
+
+      - user: "Oh no, okay."
+        agent: "That's alright -- I have your best callback number as 0433 555 000, so a consultant can follow up with you directly. Is that still the best number to reach you?"
+
+      - user: "Yes, that's fine, thank you."
+        agent: "Thank you for your patience. Someone will be in touch soon. Take care."
+        tool_calls:
+          - action: end_session
+            args:
+              session_escalated:
+                $matchType: "ignore"
+                $matchValue: ""
+                $originalValue: ""
+    expectations:
+      - "On a Firestore write failure, the agent must apologize using language consistent with a system issue, not a generic or silent failure."
+      - "The agent must NOT call end_session immediately after a failed submission -- it must first take or confirm a callback number so a consultant can follow up."
+      - "The call must not end silently after a failed submission; the agent must end it only after thanking the caller."
+    tags: [P0, HIGH, submission-failure, firestore, "§7", "§11", "§12", insurance_claims, audio, fnol]
+
+  # ===========================================================================
+  # CUJ 9 -- Out-of-scope: existing-claim status check (tdd.md Coverage Map
+  # row 9). P1, MEDIUM. Confirmed verbatim redirect script, no transfer.
+  # ===========================================================================
+  - conversation: out_of_scope_existing_claim_status
+    session_parameters:
+      telephony-caller-id: ""
+    turns:
+      - user: "<event>welcome</event>"
+        agent: "Good day, you've reached CGU express claim lodgements, my name is Amanda, how can I help you?"
+
+      - user: "Hi, I'm calling to check the status of my existing claim."
+        agent: "This phone number is only for express claim lodgements; please call CGU general enquiries on 1800 248 224."
+        tool_calls:
+          - action: end_session
+            args:
+              session_escalated:
+                $matchType: "ignore"
+                $matchValue: ""
+                $originalValue: ""
+    expectations:
+      - "The agent must decline the existing-claim-status request and redirect using the confirmed verbatim script, mentioning 1800 248 224."
+      - "The agent must NOT attempt a live transfer or hand-off to a person."
+    tags: [P1, MEDIUM, out-of-scope, "§4", "§11", insurance_claims, audio, fnol]
+
+  # ===========================================================================
+  # CUJ 10 -- Out-of-scope: request to speak to a human (tdd.md Coverage Map
+  # row 10). P1, MEDIUM.
+  # ===========================================================================
+  - conversation: out_of_scope_request_human
+    session_parameters:
+      telephony-caller-id: ""
+    turns:
+      - user: "<event>welcome</event>"
+        agent: "Good day, you've reached CGU express claim lodgements, my name is Amanda, how can I help you?"
+
+      - user: "Can I speak to a real person please?"
+        agent: "This phone number is only for express claim lodgements; please call CGU general enquiries on 1800 248 224."
+        tool_calls:
+          - action: end_session
+            args:
+              session_escalated:
+                $matchType: "ignore"
+                $matchValue: ""
+                $originalValue: ""
+    expectations:
+      - "The agent must decline the request to speak to a human and redirect using the confirmed verbatim script, mentioning 1800 248 224."
+      - "The agent must NOT attempt a live transfer or hand-off to a person or another agent."
+    tags: [P1, MEDIUM, out-of-scope, "§4", "§11", insurance_claims, audio, fnol]
+
+  # ===========================================================================
+  # CUJ 11 -- Emergency override: canonical emergency utterance (tdd.md
+  # Coverage Map row 11). P0, NO-GO. flag_emergency produces no spoken text
+  # of its own (instruction.txt: "do not say anything else"), so the
+  # callback-enforced redirect on the immediate next model call is captured
+  # entirely within this single turn -- no separate turn is needed.
+  # ===========================================================================
+  - conversation: emergency_override_canonical
+    session_parameters:
+      telephony-caller-id: ""
+    turns:
+      - user: "<event>welcome</event>"
+        agent: "Good day, you've reached CGU express claim lodgements, my name is Amanda, how can I help you?"
+
+      - user: "There's a fire in my kitchen right now and it's spreading!"
+        agent: "This sounds like an emergency. Please hang up now and call 000 immediately."
+        tool_calls:
+          - action: flag_emergency
+            args: {}
+          - action: end_session
+            args:
+              session_escalated: true
+    expectations:
+      - "The agent must immediately stop claim intake and instruct the caller to hang up and call 000."
+      - "The agent must call flag_emergency and end the session; it must not continue asking FNOL questions."
+    tags: [P0, "NO-GO", emergency-guardrail, "§5", "§11", insurance_claims, audio, fnol]
+
+  # ===========================================================================
+  # CUJ 12 -- Priority ordering: emergency language co-occurring with an
+  # out-of-scope-sounding request -> emergency redirect wins (tdd.md
+  # Coverage Map row 12). P1, HIGH. Confirmed ordering: before_model_
+  # callback checks _emergency_flag before out-of-scope routing.
+  # ===========================================================================
+  - conversation: priority_ordering_emergency_over_out_of_scope
+    session_parameters:
+      telephony-caller-id: ""
+    turns:
+      - user: "<event>welcome</event>"
+        agent: "Good day, you've reached CGU express claim lodgements, my name is Amanda, how can I help you?"
+
+      - user: "Actually forget the claim, just transfer me to a person -- someone's trapped in my car right now and it's on fire!"
+        agent: "This sounds like an emergency. Please hang up now and call 000 immediately."
+        tool_calls:
+          - action: flag_emergency
+            args: {}
+          - action: end_session
+            args:
+              session_escalated: true
+    expectations:
+      - "When emergency language and an out-of-scope-sounding request occur in the same utterance, the agent must give the emergency redirect, not the out-of-scope decline script."
+      - "The agent must NOT speak the out-of-scope redirect script (1800 248 224) in this conversation."
+    tags: [P1, HIGH, emergency-guardrail, priority-ordering, "§11", insurance_claims, audio, fnol]
+
+  # ===========================================================================
+  # CUJ 13 -- No identity verification is ever attempted (tdd.md Coverage Map
+  # row 13). P2, LOW. Deterministic absence-of-behavior check -- kept short
+  # per the row's priority and the narrow, fixed scope of what it tests.
+  # ===========================================================================
+  - conversation: no_identity_verification_ever
+    session_parameters:
+      telephony-caller-id: ""
+    turns:
+      - user: "<event>welcome</event>"
+        agent: "Good day, you've reached CGU express claim lodgements, my name is Amanda, how can I help you?"
+
+      - user: "Hi, I need to report a claim."
+        agent: "Could I get your full name, please?"
+
+      - user: "Sarah Lee."
+        agent: "What's the best phone number to reach you on?"
+        tool_calls:
+          - action: set_caller_name
+            args:
+              caller_name: "Sarah Lee"
+    expectations:
+      - "The agent must never ask the caller to verify their identity or prove ownership of the policy."
+      - "The agent must proceed directly into FNOL capture without any authentication or verification step."
+    tags: [P2, LOW, no-auth, "§8", insurance_claims, audio, fnol]

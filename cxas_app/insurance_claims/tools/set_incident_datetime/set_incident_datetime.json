@@ -1,0 +1,10 @@
+{
+    "name": "set_incident_datetime",
+    "pythonFunction": {
+        "name": "set_incident_datetime",
+        "pythonCode": "tools/set_incident_datetime/python_function/python_code.py",
+        "description": "Records the date and approximate time the incident occurred, in YYYY-MM-DD HH:MM format. Resolve relative wording (e.g. 'yesterday morning') using the current_date variable before calling."
+    },
+    "executionType": "SYNCHRONOUS",
+    "displayName": "set_incident_datetime"
+}

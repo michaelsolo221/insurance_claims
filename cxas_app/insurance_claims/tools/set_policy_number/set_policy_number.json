@@ -1,0 +1,10 @@
+{
+    "name": "set_policy_number",
+    "pythonFunction": {
+        "name": "set_policy_number",
+        "pythonCode": "tools/set_policy_number/python_function/python_code.py",
+        "description": "Records the caller's CGU policy number. This FNOL field is optional -- only call when the caller actually provides a policy number."
+    },
+    "executionType": "SYNCHRONOUS",
+    "displayName": "set_policy_number"
+}

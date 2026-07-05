@@ -1,0 +1,10 @@
+{
+    "name": "set_hazard_flag",
+    "pythonFunction": {
+        "name": "set_hazard_flag",
+        "pythonCode": "tools/set_hazard_flag/python_function/python_code.py",
+        "description": "Records whether there is an ongoing hazard at the scene, such as a safety risk to others (true/false)."
+    },
+    "executionType": "SYNCHRONOUS",
+    "displayName": "set_hazard_flag"
+}

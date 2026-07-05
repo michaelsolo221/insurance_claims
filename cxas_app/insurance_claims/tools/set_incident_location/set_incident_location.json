@@ -1,0 +1,10 @@
+{
+    "name": "set_incident_location",
+    "pythonFunction": {
+        "name": "set_incident_location",
+        "pythonCode": "tools/set_incident_location/python_function/python_code.py",
+        "description": "Records where the incident occurred (address, suburb, or landmark)."
+    },
+    "executionType": "SYNCHRONOUS",
+    "displayName": "set_incident_location"
+}

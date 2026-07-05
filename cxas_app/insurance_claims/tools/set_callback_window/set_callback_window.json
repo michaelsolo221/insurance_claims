@@ -1,0 +1,10 @@
+{
+    "name": "set_callback_window",
+    "pythonFunction": {
+        "name": "set_callback_window",
+        "pythonCode": "tools/set_callback_window/python_function/python_code.py",
+        "description": "Records the caller's preferred time window for a callback. This FNOL field is optional -- only call when the caller volunteers a preference."
+    },
+    "executionType": "SYNCHRONOUS",
+    "displayName": "set_callback_window"
+}

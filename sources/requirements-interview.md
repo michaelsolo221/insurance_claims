@@ -181,7 +181,9 @@ questions:
   be built in the **existing** project `claims-lodgement-20260628`, under
   gcloud account `michael.solo@mcosolutions.com.au` — NOT a fresh project
   as §3 originally stated. §3's "stale/unrelated" framing no longer applies;
-  supersede it.
+  supersede it. **Superseded again, same day (see §13):** the final GCP
+  project is `graphic-tide-501406-p2` (org `mcosolutions.com.au`), not
+  `claims-lodgement-20260628` — see §13 for why.
 - **GTP telephony session parameters (resolves §11's deferred item):**
   investigated directly against Google Telephony Platform docs — GTP
   auto-populates a session parameter `telephony-caller-id` (type `Text`)
@@ -213,3 +215,21 @@ questions:
   (rare) becomes the new caller-facing failure-fallback trigger (apologize,
   take a callback number) — this replaces the old "Gmail send failure"
   fallback trigger from §7/§11.
+
+## 13. Project correction (same day as Round 3, post-TDD-update)
+
+- **Final GCP project (supersedes §12's `claims-lodgement-20260628`):**
+  while reviewing environment setup, an existing, already-deployed
+  `fnol-claims-agent` app was discovered in `claims-lodgement-20260628`
+  (a separate, unrelated prior build — different tool/model choices,
+  `gemini-2-flash` vs. this TDD's `gemini-3.1-flash-live`). Stakeholder
+  confirmed: ignore that prior agent, and use a **different** GCP project
+  for this build — `graphic-tide-501406-p2`, org `mcosolutions.com.au`.
+  This is now the confirmed target project for scaffolding, infra
+  (Firestore, Cloud Tasks, Cloud Function, GCS bucket), and deployment —
+  `claims-lodgement-20260628` is no longer relevant to this build at all.
+- **App name (new):** `insurance_claims`.
+- **GCS bucket for audio evals:** create a new bucket for this project;
+  stakeholder asked for best-practice IaC (Terraform) so the setup is
+  reproducible by others, since the repo is public
+  (github.com/michaelsolo221/insurance_claims).

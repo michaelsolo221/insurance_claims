@@ -1,0 +1,10 @@
+{
+    "name": "submit_claim_notification",
+    "pythonFunction": {
+        "name": "submit_claim_notification",
+        "pythonCode": "tools/submit_claim_notification/python_function/python_code.py",
+        "description": "Submits the completed FNOL claim notification: writes the claim record to Firestore (synchronous, the only thing this call waits on), then enqueues a Cloud Task to email a consultant asynchronously after the call ends. Only call once all required fields are captured or marked not captured, and the caller has confirmed the full readback."
+    },
+    "executionType": "SYNCHRONOUS",
+    "displayName": "submit_claim_notification"
+}

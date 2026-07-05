@@ -1,0 +1,22 @@
+{
+    "name": "root_agent",
+    "displayName": "root_agent",
+    "instruction": "agents/root_agent/instruction.txt",
+    "tools": [
+        "set_caller_name",
+        "set_callback_phone",
+        "set_policy_number",
+        "set_incident_datetime",
+        "set_incident_location",
+        "set_incident_description",
+        "set_injury_flag",
+        "set_hazard_flag",
+        "set_callback_window",
+        "flag_emergency",
+        "submit_claim_notification",
+        "end_session"
+    ],
+    "childAgents": [],
+    "beforeModelCallbacks": [{"pythonCode": "agents/root_agent/before_model_callbacks/before_model_callbacks_01/python_code.py"}],
+    "afterModelCallbacks": [{"pythonCode": "agents/root_agent/after_model_callbacks/after_model_callbacks_01/python_code.py"}]
+}

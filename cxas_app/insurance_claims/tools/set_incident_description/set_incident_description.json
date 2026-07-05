@@ -1,0 +1,10 @@
+{
+    "name": "set_incident_description",
+    "pythonFunction": {
+        "name": "set_incident_description",
+        "pythonCode": "tools/set_incident_description/python_function/python_code.py",
+        "description": "Records a description of what happened in the incident, in the caller's own words."
+    },
+    "executionType": "SYNCHRONOUS",
+    "displayName": "set_incident_description"
+}

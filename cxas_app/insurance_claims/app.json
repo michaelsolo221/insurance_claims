@@ -1,0 +1,125 @@
+{
+    "_comment_source": [
+        "Scaffolded from tdd.md (APPROVED, 2026-07-05) by the scaffolder agent.",
+        "Single-agent, voice-only (GTP telephony), Slot-Filling DAG Framework for FNOL capture.",
+        "See tdd.md Architecture/Tools/Variables/Callbacks sections for full design rationale."
+    ],
+    "name": "insurance_claims",
+    "displayName": "insurance_claims",
+    "description": "CGU express claim lodgement (FNOL) voice agent. Persona 'Amanda'. Captures First Notice of Loss data via a slot-filling framework, guards against active emergencies, and declines out-of-scope requests.",
+    "rootAgent": "root_agent",
+    "tools": [
+        "set_caller_name",
+        "set_callback_phone",
+        "set_policy_number",
+        "set_incident_datetime",
+        "set_incident_location",
+        "set_incident_description",
+        "set_injury_flag",
+        "set_hazard_flag",
+        "set_callback_window",
+        "flag_emergency",
+        "submit_claim_notification"
+    ],
+
+    "_comment_model_settings": [
+        "Voice modality (GTP telephony) requires the '-live' streaming model per tdd.md Architecture.",
+        "Stakeholder confirmed default platform speaking rate/voice persona -- no speakingRate override (tdd.md §2)."
+    ],
+    "modelSettings": {
+        "model": "gemini-3.1-flash-live"
+    },
+
+    "languageSettings": {
+        "defaultLanguageCode": "en-US"
+    },
+    "timeZoneSettings": {
+        "timeZone": "Australia/Sydney"
+    },
+    "audioProcessingConfig": {
+        "synthesizeSpeechConfigs": {
+            "en-US": {
+                "speakingRate": 1.0
+            }
+        }
+    },
+    "defaultChannelProfile": {
+    },
+
+    "_comment_logging_settings": [
+        "Voice/audio agent -- evaluationAudioRecordingConfig is required for golden runs.",
+        "gcsBucket taken from gecx-config.json's gcs_bucket field."
+    ],
+    "loggingSettings": {
+        "conversationLoggingSettings": {},
+        "evaluationAudioRecordingConfig": {
+            "gcsBucket": "gs://graphic-tide-501406-p2-insurance-claims-audio-evals"
+        }
+    },
+    "toolExecutionMode": "PARALLEL",
+
+    "evaluationMetricsThresholds": {
+        "goldenEvaluationMetricsThresholds": {
+            "turnLevelMetricsThresholds": {
+                "semanticSimilaritySuccessThreshold": 3,
+                "overallToolInvocationCorrectnessThreshold": 1
+            },
+            "toolMatchingSettings": {
+                "extraToolCallBehavior": "ALLOW"
+            }
+        },
+        "goldenHallucinationMetricBehavior": "DISABLED"
+    },
+
+    "_comment_variables": [
+        "telephony-caller-id: GTP-supplied session parameter (tdd.md §12/§13). Pre-fills callback_phone.",
+        "_emergency_flag: internal trigger set by flag_emergency tool, read+cleared by before_model_callback (tdd.md §5/§11).",
+        "claim_notification_draft: consolidated Slot-Filling state per gecx-design-guide.md 'Feature Encapsulation' -- one sub-object per FNOL slot plus readback_confirmed and internal orchestrator bookkeeping (_last_asked_slot, _awaiting_readback_response).",
+        "_system_message: dynamic-prompting directive written by before_model_callback each turn, referenced in instruction.txt as {_system_message} (design guide 'Dynamic Prompting').",
+        "_submission_acknowledged: internal one-shot guard set by after_model_callback once the submit_claim_notification outcome has been acknowledged, so the acknowledgment is not re-spoken on later model calls within the same turn or on subsequent turns (see after_model_callback's python_code.py)."
+    ],
+    "variableDeclarations": [
+        {
+            "name": "telephony-caller-id",
+            "description": "GTP platform-supplied session parameter containing the caller's ANI (phone number), auto-populated on every call. May be absent/empty if no custom SBC/SIP configuration supplies it (tdd.md §12). Used to pre-fill claim_notification_draft.callback_phone for read-back confirmation instead of a cold ask.",
+            "schema": {"type": "STRING", "default": ""}
+        },
+        {
+            "name": "_emergency_flag",
+            "description": "Internal signal set by the flag_emergency tool the moment the LLM judges the caller's language indicates an active emergency. Read and cleared by before_model_callback, which checks this before anything else (confirmed priority ordering, tdd.md §11). NEVER override in evals.",
+            "schema": {"type": "BOOLEAN", "default": false}
+        },
+        {
+            "name": "claim_notification_draft",
+            "description": "Consolidated Slot-Filling state for the 9 FNOL fields (tdd.md §6/§11/§12). One sub-object per slot tracking {value, status, attempts} (required slots) or {value, status} (optional slots: policy_number, callback_window). Top-level readback_confirmed gates submit_claim_notification visibility. Written by the 9 setter tools and by before_model_callback's orchestrator (_run_slot_filling). NEVER override in evals except via the telephony-caller-id session parameter, which drives the callback_phone pre-fill branch.",
+            "schema": {
+                "type": "OBJECT",
+                "default": {
+                    "caller_name": {"value": "", "status": "unfilled", "attempts": 0},
+                    "callback_phone": {"value": "", "status": "unfilled", "attempts": 0},
+                    "policy_number": {"value": "", "status": "unfilled"},
+                    "incident_datetime": {"value": "", "status": "unfilled", "attempts": 0},
+                    "incident_location": {"value": "", "status": "unfilled", "attempts": 0},
+                    "incident_description": {"value": "", "status": "unfilled", "attempts": 0},
+                    "injury_flag": {"value": "", "status": "unfilled", "attempts": 0},
+                    "hazard_flag": {"value": "", "status": "unfilled", "attempts": 0},
+                    "callback_window": {"value": "", "status": "unfilled"},
+                    "readback_confirmed": false,
+                    "_last_asked_slot": "",
+                    "_awaiting_readback_response": false,
+                    "_slot_errors": []
+                }
+            }
+        },
+        {
+            "name": "_system_message",
+            "description": "Internal dynamic-prompting directive written each turn by before_model_callback's Slot-Filling orchestrator (_run_slot_filling): the next question to ask, the readback recap, or an error message. Referenced in root_agent's instruction.txt as {_system_message}. NEVER override in evals.",
+            "schema": {"type": "STRING", "default": ""}
+        },
+        {
+            "name": "_submission_acknowledged",
+            "description": "Internal one-shot guard written by after_model_callback ('true'/'false' string) once the submit_claim_notification outcome (success or failure) has been spoken, preventing the acknowledgment from being re-injected on a later model call within the same turn or on subsequent turns during the failure fallback conversation. NEVER override in evals.",
+            "schema": {"type": "STRING", "default": "false"}
+        }
+    ]
+}

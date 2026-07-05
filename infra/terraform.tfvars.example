@@ -1,0 +1,12 @@
+# Copy this file to terraform.tfvars (gitignored) and fill in your own values.
+# Never commit terraform.tfvars — it's project-specific and this repo is public.
+
+project_id = "your-gcp-project-id"
+region     = "us-central1"
+
+# Optional overrides — safe to leave at their defaults:
+# firestore_location        = "nam5"
+# app_name                  = "insurance-claims"
+# audio_eval_bucket_name    = null  # defaults to "<project_id>-<app_name>-audio-evals"
+# claim_notification_email  = "michael@michael-lo.com"
+# gmail_send_as_user        = "michael@michael-lo.com"

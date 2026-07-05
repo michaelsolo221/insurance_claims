@@ -1,0 +1,424 @@
+# Tool tests for insurance_claims (CGU express claim lodgement voice agent).
+#
+# Grounded against tdd.md's Tools section and the actual tool source under
+# cxas_app/insurance_claims/tools/<name>/python_function/python_code.py.
+# Response keys below are copied verbatim from each tool's `return` statements
+# -- not guessed. Tool display names are copied verbatim from app.json's
+# top-level `tools` array (all 11 confirmed present, no fabrication needed).
+#
+# Coverage: all 9 FNOL slot setters (success + error branch(es) each),
+# flag_emergency (success), submit_claim_notification (success path only --
+# see the note above that test for why a Firestore-write-failure test is not
+# included).
+
+tests:
+  # -------------------------------------------------------------------------
+  # set_caller_name -- tools/set_caller_name/python_function/python_code.py
+  # Returns {"stored": True, "value": <name>} on success, or
+  # {"error": True, "error_code": "empty_value", "agent_action": <str>}.
+  # -------------------------------------------------------------------------
+  - name: set_caller_name_success
+    tool: set_caller_name
+    args:
+      caller_name: "Jordan Reyes"
+    expectations:
+      response:
+        - path: "$.result.stored"
+          operator: equals
+          value: true
+        - path: "$.result.value"
+          operator: equals
+          value: "Jordan Reyes"
+
+  - name: set_caller_name_empty_value_error
+    tool: set_caller_name
+    args:
+      caller_name: ""
+    expectations:
+      response:
+        - path: "$.result.error"
+          operator: equals
+          value: true
+        - path: "$.result.error_code"
+          operator: equals
+          value: "empty_value"
+        - path: "$.result.agent_action"
+          operator: is_not_null
+
+  # -------------------------------------------------------------------------
+  # set_callback_phone -- tools/set_callback_phone/python_function/python_code.py
+  # Returns {"stored": True, "value": <raw>} on success, or
+  # {"error": True, "error_code": "invalid_format", "agent_action": <str>}
+  # when fewer than 8 digits are present.
+  # -------------------------------------------------------------------------
+  - name: set_callback_phone_success
+    tool: set_callback_phone
+    args:
+      phone_number: "0412 345 678"
+    expectations:
+      response:
+        - path: "$.result.stored"
+          operator: equals
+          value: true
+        - path: "$.result.value"
+          operator: equals
+          value: "0412 345 678"
+
+  - name: set_callback_phone_invalid_format_error
+    tool: set_callback_phone
+    args:
+      phone_number: "12345"
+    expectations:
+      response:
+        - path: "$.result.error"
+          operator: equals
+          value: true
+        - path: "$.result.error_code"
+          operator: equals
+          value: "invalid_format"
+        - path: "$.result.agent_action"
+          operator: is_not_null
+
+  # -------------------------------------------------------------------------
+  # set_policy_number -- optional slot, tools/set_policy_number/python_function/python_code.py
+  # Returns {"stored": True, "value": <policy_number>} on success, or
+  # {"error": True, "error_code": "empty_value", "agent_action": <str>}.
+  # -------------------------------------------------------------------------
+  - name: set_policy_number_success
+    tool: set_policy_number
+    args:
+      policy_number: "CGU-9938217"
+    expectations:
+      response:
+        - path: "$.result.stored"
+          operator: equals
+          value: true
+        - path: "$.result.value"
+          operator: equals
+          value: "CGU-9938217"
+
+  - name: set_policy_number_empty_value_error
+    tool: set_policy_number
+    args:
+      policy_number: ""
+    expectations:
+      response:
+        - path: "$.result.error"
+          operator: equals
+          value: true
+        - path: "$.result.error_code"
+          operator: equals
+          value: "empty_value"
+        - path: "$.result.agent_action"
+          operator: is_not_null
+
+  # -------------------------------------------------------------------------
+  # set_incident_datetime -- tools/set_incident_datetime/python_function/python_code.py
+  # Accepts "YYYY-MM-DD HH:MM" or "YYYY-MM-DD". Returns
+  # {"stored": True, "value": <raw>} on success, or
+  # {"error": True, "error_code": "invalid_format", "agent_action": <str>}
+  # if neither format parses.
+  # -------------------------------------------------------------------------
+  - name: set_incident_datetime_success_with_time
+    tool: set_incident_datetime
+    args:
+      incident_datetime: "2026-07-03 14:30"
+    expectations:
+      response:
+        - path: "$.result.stored"
+          operator: equals
+          value: true
+        - path: "$.result.value"
+          operator: equals
+          value: "2026-07-03 14:30"
+
+  - name: set_incident_datetime_success_date_only
+    tool: set_incident_datetime
+    args:
+      incident_datetime: "2026-07-03"
+    expectations:
+      response:
+        - path: "$.result.stored"
+          operator: equals
+          value: true
+        - path: "$.result.value"
+          operator: equals
+          value: "2026-07-03"
+
+  - name: set_incident_datetime_invalid_format_error
+    tool: set_incident_datetime
+    args:
+      incident_datetime: "sometime last week"
+    expectations:
+      response:
+        - path: "$.result.error"
+          operator: equals
+          value: true
+        - path: "$.result.error_code"
+          operator: equals
+          value: "invalid_format"
+        - path: "$.result.agent_action"
+          operator: is_not_null
+
+  # -------------------------------------------------------------------------
+  # set_incident_location -- tools/set_incident_location/python_function/python_code.py
+  # Returns {"stored": True, "value": <location>} on success, or
+  # {"error": True, "error_code": "empty_value", "agent_action": <str>}.
+  # -------------------------------------------------------------------------
+  - name: set_incident_location_success
+    tool: set_incident_location
+    args:
+      incident_location: "42 Wattle Street, Parramatta"
+    expectations:
+      response:
+        - path: "$.result.stored"
+          operator: equals
+          value: true
+        - path: "$.result.value"
+          operator: equals
+          value: "42 Wattle Street, Parramatta"
+
+  - name: set_incident_location_empty_value_error
+    tool: set_incident_location
+    args:
+      incident_location: ""
+    expectations:
+      response:
+        - path: "$.result.error"
+          operator: equals
+          value: true
+        - path: "$.result.error_code"
+          operator: equals
+          value: "empty_value"
+        - path: "$.result.agent_action"
+          operator: is_not_null
+
+  # -------------------------------------------------------------------------
+  # set_incident_description -- tools/set_incident_description/python_function/python_code.py
+  # Returns {"stored": True, "value": <description>} on success, or
+  # {"error": True, "error_code": "empty_value", "agent_action": <str>}.
+  # -------------------------------------------------------------------------
+  - name: set_incident_description_success
+    tool: set_incident_description
+    args:
+      incident_description: "A tree branch fell on the parked car during a storm."
+    expectations:
+      response:
+        - path: "$.result.stored"
+          operator: equals
+          value: true
+        - path: "$.result.value"
+          operator: equals
+          value: "A tree branch fell on the parked car during a storm."
+
+  - name: set_incident_description_empty_value_error
+    tool: set_incident_description
+    args:
+      incident_description: ""
+    expectations:
+      response:
+        - path: "$.result.error"
+          operator: equals
+          value: true
+        - path: "$.result.error_code"
+          operator: equals
+          value: "empty_value"
+        - path: "$.result.agent_action"
+          operator: is_not_null
+
+  # -------------------------------------------------------------------------
+  # set_injury_flag -- tools/set_injury_flag/python_function/python_code.py
+  # Returns {"stored": True, "value": <bool>} on success, or
+  # {"error": True, "error_code": "missing_value", "agent_action": <str>}
+  # when injury_occurred is None (argument not supplied).
+  # -------------------------------------------------------------------------
+  - name: set_injury_flag_success_true
+    tool: set_injury_flag
+    args:
+      injury_occurred: true
+    expectations:
+      response:
+        - path: "$.result.stored"
+          operator: equals
+          value: true
+        - path: "$.result.value"
+          operator: equals
+          value: true
+
+  - name: set_injury_flag_success_false
+    tool: set_injury_flag
+    args:
+      injury_occurred: false
+    expectations:
+      response:
+        - path: "$.result.stored"
+          operator: equals
+          value: true
+        - path: "$.result.value"
+          operator: equals
+          value: false
+
+  - name: set_injury_flag_missing_value_error
+    tool: set_injury_flag
+    args:
+      injury_occurred: null
+    expectations:
+      response:
+        - path: "$.result.error"
+          operator: equals
+          value: true
+        - path: "$.result.error_code"
+          operator: equals
+          value: "missing_value"
+        - path: "$.result.agent_action"
+          operator: is_not_null
+
+  # -------------------------------------------------------------------------
+  # set_hazard_flag -- tools/set_hazard_flag/python_function/python_code.py
+  # Returns {"stored": True, "value": <bool>} on success, or
+  # {"error": True, "error_code": "missing_value", "agent_action": <str>}
+  # when hazard_present is None (argument not supplied).
+  # -------------------------------------------------------------------------
+  - name: set_hazard_flag_success_true
+    tool: set_hazard_flag
+    args:
+      hazard_present: true
+    expectations:
+      response:
+        - path: "$.result.stored"
+          operator: equals
+          value: true
+        - path: "$.result.value"
+          operator: equals
+          value: true
+
+  - name: set_hazard_flag_success_false
+    tool: set_hazard_flag
+    args:
+      hazard_present: false
+    expectations:
+      response:
+        - path: "$.result.stored"
+          operator: equals
+          value: true
+        - path: "$.result.value"
+          operator: equals
+          value: false
+
+  - name: set_hazard_flag_missing_value_error
+    tool: set_hazard_flag
+    args:
+      hazard_present: null
+    expectations:
+      response:
+        - path: "$.result.error"
+          operator: equals
+          value: true
+        - path: "$.result.error_code"
+          operator: equals
+          value: "missing_value"
+        - path: "$.result.agent_action"
+          operator: is_not_null
+
+  # -------------------------------------------------------------------------
+  # set_callback_window -- optional slot, tools/set_callback_window/python_function/python_code.py
+  # Returns {"stored": True, "value": <callback_window>} on success, or
+  # {"error": True, "error_code": "empty_value", "agent_action": <str>}.
+  # -------------------------------------------------------------------------
+  - name: set_callback_window_success
+    tool: set_callback_window
+    args:
+      callback_window: "weekday mornings"
+    expectations:
+      response:
+        - path: "$.result.stored"
+          operator: equals
+          value: true
+        - path: "$.result.value"
+          operator: equals
+          value: "weekday mornings"
+
+  - name: set_callback_window_empty_value_error
+    tool: set_callback_window
+    args:
+      callback_window: ""
+    expectations:
+      response:
+        - path: "$.result.error"
+          operator: equals
+          value: true
+        - path: "$.result.error_code"
+          operator: equals
+          value: "empty_value"
+        - path: "$.result.agent_action"
+          operator: is_not_null
+
+  # -------------------------------------------------------------------------
+  # flag_emergency -- tools/flag_emergency/python_function/python_code.py
+  # Takes no args. Always returns {"flagged": True, "agent_action": <str>} --
+  # it has no error branch (it only sets context.state["_emergency_flag"]).
+  # -------------------------------------------------------------------------
+  - name: flag_emergency_success
+    tool: flag_emergency
+    args: {}
+    expectations:
+      response:
+        - path: "$.result.flagged"
+          operator: equals
+          value: true
+        - path: "$.result.agent_action"
+          operator: is_not_null
+
+  # -------------------------------------------------------------------------
+  # submit_claim_notification -- tools/submit_claim_notification/python_function/python_code.py
+  # Takes no args; reads the full claim_notification_draft from context.state.
+  # Two-step tool: (1) synchronous Firestore write -- the ONLY outcome
+  # reflected in the return value; (2) fire-and-forget Cloud Task enqueue,
+  # whose failure never changes the return value (caught and only logged).
+  #
+  # Success path: {"success": True, "claim_id": <str>}.
+  # -------------------------------------------------------------------------
+  - name: submit_claim_notification_success
+    tool: submit_claim_notification
+    args: {}
+    variables:
+      claim_notification_draft:
+        caller_name: {value: "Jordan Reyes", status: "confirmed", attempts: 1}
+        callback_phone: {value: "0412 345 678", status: "confirmed", attempts: 1}
+        policy_number: {value: "", status: "not_captured"}
+        incident_datetime: {value: "2026-07-03 14:30", status: "confirmed", attempts: 1}
+        incident_location: {value: "42 Wattle Street, Parramatta", status: "confirmed", attempts: 1}
+        incident_description: {value: "A tree branch fell on the parked car during a storm.", status: "confirmed", attempts: 1}
+        injury_flag: {value: false, status: "confirmed", attempts: 1}
+        hazard_flag: {value: false, status: "confirmed", attempts: 1}
+        callback_window: {value: "", status: "not_captured"}
+        readback_confirmed: true
+    expectations:
+      response:
+        - path: "$.result.success"
+          operator: equals
+          value: true
+        - path: "$.result.claim_id"
+          operator: is_not_null
+
+  # NOTE (real limitation, not fabricated): a deterministic
+  # submit_claim_notification_firestore_failure test is NOT included above.
+  # The tool's try/except (see python_code.py lines ~100-115) only catches
+  # exceptions raised by a REAL `google.cloud.firestore.Client(...).set(...)`
+  # call -- there is no `variables`/`args`-controlled branch, feature flag, or
+  # monkeypatch seam in the tool code that a YAML `tests:` entry's `args` or
+  # `variables` block can reach to force that call to fail. The YAML tool-test
+  # format (per eval-templates.md's "Tool Tests" section) only supports
+  # `args` (function kwargs) and `variables` (context.state seeding) -- it has
+  # no mechanism to inject a mock Firestore/Cloud Tasks client, unlike the
+  # callback-test format's sys.path + module-global mock-injection pattern.
+  # Whether `submit_claim_notification_success` above actually returns
+  # success=True therefore depends on real Firestore reachability/credentials
+  # in whatever environment runs this suite (project graphic-tide-501406-p2,
+  # database insurance-claims-fnol, collection claim_notifications per the
+  # tool's module docstring) -- it is not a hermetic unit test. Forcing the
+  # failure branch deterministically would require either (a) a code change
+  # to the tool adding a test-injectable client/seam, or (b) covering this
+  # path at the callback-test or integration-test layer instead. Flagging for
+  # the main thread rather than fabricating a test that cannot actually
+  # exercise the failure path.

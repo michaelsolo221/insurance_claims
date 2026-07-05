@@ -1,0 +1,10 @@
+{
+    "name": "flag_emergency",
+    "pythonFunction": {
+        "name": "flag_emergency",
+        "pythonCode": "tools/flag_emergency/python_function/python_code.py",
+        "description": "Signals that the caller's language indicates an active emergency or danger in progress. Call this the moment you judge this to be true, at any point in the conversation."
+    },
+    "executionType": "SYNCHRONOUS",
+    "displayName": "flag_emergency"
+}

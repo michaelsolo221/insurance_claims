@@ -1,0 +1,10 @@
+{
+    "name": "set_caller_name",
+    "pythonFunction": {
+        "name": "set_caller_name",
+        "pythonCode": "tools/set_caller_name/python_function/python_code.py",
+        "description": "Records the caller's full name for the FNOL claim notification. Call this the moment the caller states their name."
+    },
+    "executionType": "SYNCHRONOUS",
+    "displayName": "set_caller_name"
+}

@@ -1,0 +1,10 @@
+{
+    "name": "set_callback_phone",
+    "pythonFunction": {
+        "name": "set_callback_phone",
+        "pythonCode": "tools/set_callback_phone/python_function/python_code.py",
+        "description": "Records the best callback phone number for the claim. Also used to confirm or correct the number pre-filled from the caller's phone line (telephony-caller-id), when present."
+    },
+    "executionType": "SYNCHRONOUS",
+    "displayName": "set_callback_phone"
+}
